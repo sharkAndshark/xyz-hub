@@ -63,6 +63,10 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.validation.BadRequestException;
+import io.vertx.ext.web.validation.BodyProcessorException;
+import io.vertx.ext.web.validation.ParameterProcessorException;
+import io.vertx.ext.web.validation.RequestPredicateException;
+import io.vertx.ext.web.validation.impl.ParameterLocation;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -173,7 +177,19 @@ public abstract class AbstractHttpServerVerticle extends AbstractVerticle {
             message = "Missing auth credentials.";
           t = new HttpException(status, message, t);
         }
-        sendErrorResponse(context, t);
+        if (t instanceof BodyProcessorException)
+          sendErrorResponse(context, new HttpException(BAD_REQUEST, "Failed to parse body."));
+        else if (t instanceof ParameterProcessorException) {
+          ParameterLocation location = ((ParameterProcessorException) t).getLocation();
+          String paramName = ((ParameterProcessorException) t).getParameterName();
+          sendErrorResponse(context, new HttpException(BAD_REQUEST, "Invalid request input parameter value for "
+              + location.name().toLowerCase() + "-parameter \"" + location.lowerCaseIfNeeded(paramName) + "\". Reason: "
+              + ((ParameterProcessorException) t).getErrorType()));
+        }
+        else if (t instanceof BadRequestException)
+          sendErrorResponse(context, new HttpException(BAD_REQUEST, "Invalid request."));
+        else
+          sendErrorResponse(context, t);
       }
       else {
         HttpResponseStatus status = context.statusCode() >= 400 ? HttpResponseStatus.valueOf(context.statusCode()) : INTERNAL_SERVER_ERROR;
